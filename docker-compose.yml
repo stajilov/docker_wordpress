@@ -1,0 +1,67 @@
+version: '3.3'
+
+services:
+  
+  db:
+    image: mysql:5.7
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./wp-hyundai.sql.gz:/docker-entrypoint-initdb.d/backup.sql.gz
+      - ./migrate.sql:/docker-entrypoint-initdb.d/migrate.sql
+
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 2398748923322dddd
+      MYSQL_DATABASE: cw_prod_db_nice
+      MYSQL_USER: cw_user
+      MYSQL_PASSWORD: 2398748923322dddd
+
+  wordpress:
+    depends_on:
+      - db
+    image: wordpress:fpm
+    ports:
+      - "8000:80"
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: cw_user
+      WORDPRESS_DB_PASSWORD: 2398748923322dddd
+      WORDPRESS_DB_NAME: cw_prod_db_nice
+    volumes:
+      - ./your_wp_source_folder:/var/www/html
+
+  redis:
+    image: 'docker.io/bitnami/redis:6.0-debian-10'
+    environment:
+      # ALLOW_EMPTY_PASSWORD is recommended only for development.
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    ports:
+      - '6379:6379'
+
+  nginx:
+    depends_on:
+      - wordpress
+    image: raulr/nginx-wordpress
+    ports:
+      - 80:80
+      - 443:443
+    restart: unless-stopped
+    volumes:
+      - ./your_wp_source_folder:/var/www/html
+      - ./nginx-conf:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+    db_data: {}
